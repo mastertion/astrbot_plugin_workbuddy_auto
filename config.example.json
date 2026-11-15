@@ -12,7 +12,7 @@
   "notify_on_schedule": true,
   "no_desktop": true,
   "timeout": 1800,
-  "reply_chars": 1200,
+  "reply_chars": 2000,
   "pushplus_token": "",
   "wecom_webhook": "",
   "notify_url": "",

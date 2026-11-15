@@ -538,11 +538,21 @@ def queryCredits(s):
         pkgs = r.get("data", {}).get("Packages", [])
         paid = r.get("data", {}).get("IsPaidUser")
         out = []
+        # [AstrBot 插件化补丁] 原版用 rstrip("0") 会把数值 0 截成空串，
+        # 且 1375.36000266 这类浮点太长；统一规范为最多两位小数。
+        def cap(v):
+            try:
+                return ("%.2f" % float(v)).rstrip("0").rstrip(".") or "0"
+            except (TypeError, ValueError):
+                return str(v) if v is not None else "?"
+
         for p in pkgs:
-            out.append("余%s/总%s(已用%s %s)" % (p.get("CycleRemainCapacity", "?").rstrip("0").rstrip("."),
-                                               p.get("CycleTotalCapacity", "?"),
-                                               p.get("CycleUsedCapacity", "?").rstrip("0").rstrip("."),
-                                               p.get("CapacityUnit", "credits")))
+            out.append("余%s/总%s(已用%s %s)" % (
+                cap(p.get("CycleRemainCapacity")),
+                cap(p.get("CycleTotalCapacity")),
+                cap(p.get("CycleUsedCapacity")),
+                p.get("CapacityUnit") or "credits",
+            ))
         return "; ".join(out) if out else "无套餐数据", paid
     except Exception as e:
         return "查询失败:" + str(e)[:40], None

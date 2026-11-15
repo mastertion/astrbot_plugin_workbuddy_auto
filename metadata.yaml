@@ -12,7 +12,7 @@ desc: |
   ## 指令（默认唤醒前缀 /）
   /wb help                 查看帮助
   /wb run [账号序号]        立即执行完整签到（如 /wb run 2）
-  /wb query                仅查询积分 / 用量 / 成长
+  /wb query                查询积分 / 用量 / 成长（按账号分组的易读报告）
   /wb refresh              仅刷新全部账号 Token
   /wb status               运行状态、账号数、下次定时
   /wb accounts             已保存账号（脱敏）
@@ -30,11 +30,16 @@ desc: |
   2. 点「发送测试消息」验证 QQ 推送；再 /wb run 手动跑一次签到。
   3. 默认每天北京时间 07:00 / 12:00 / 23:30 自动执行并推送。
 
+  ## 报告
+  v1.2 起报告按账号分组：每个套餐的「剩余/总额/已用」逐条列出并给小计，
+  账号以昵称 + 脱敏手机号标识，底部附名词解释；横幅、环境提示与附加通道
+  报错单独归类，不混进账号数据。`reply_chars` 建议 ≥ 2000。
+
   ## 注意
   - 同一账号不要与独立容器 / GitHub Actions 版本同时运行，避免刷新令牌互相覆盖。
   - Docker 环境请保持 no_desktop: true（跳过 Windows 桌面端专属任务）。
   - Token 属于账号凭据，导出的配置 JSON 含明文令牌，请勿公开。
-version: 1.1.0
+version: 1.2.0
 author: mastertion
 repo: https://github.com/mastertion/astrbot_plugin_workbuddy_auto
 astrbot_version: ">=4.0.0"

@@ -71,8 +71,9 @@
   },
   "reply_chars": {
     "type": "int",
-    "description": "指令 / 推送返回的摘要最大字符数",
-    "default": 1200,
+    "description": "报告最大字符数（v1.2 详细报告建议 2000 以上）",
+    "hint": "设得太小会截断名词解释与后面的账号；/wb log 始终保留完整原始日志。",
+    "default": 2000,
     "slider": {
       "min": 200,
       "max": 4000,

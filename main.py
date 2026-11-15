@@ -22,6 +22,10 @@ v1.1 新增：
   - WebUI 设置页（views/settings + context.register_web_api + bridge）
   - 「配置链接下载配置」：从 http(s) 链接拉取 JSON 配置并覆盖式应用
   - notify_qqs / umo_platform：直接填 QQ 号即可推送，无需手写 UMO
+
+v1.2 新增：
+  - 易读报告：按账号分组、套餐逐条解释、昵称/脱敏手机号标识、名词释义
+  - 横幅/环境提示/附加通道报错单独归类，不再混进账号数据
 """
 import asyncio
 import json
@@ -63,6 +67,28 @@ SUMMARY_KEYS = (
     "无待领奖励", "跳过", "账号数",
 )
 
+# ---- 报告解析 -------------------------------------------------------------
+# 引擎日志行形如：[12:58:57][账号1] 💰 积分: 余...; 余...
+REPORT_LINE_RE = re.compile(r"^\[\d{1,2}:\d{2}:\d{2}\]\[([^\]]+)\]\s*(.*)$")
+REPORT_CREDIT_RE = re.compile(
+    r"余\s*([\d.]*)\s*/\s*总\s*([\d.]*)\s*\(\s*已用\s*([\d.]*)\s*([A-Za-z]*)\s*\)"
+)
+REPORT_USAGE_RE = re.compile(r"资源\s*(\d+)\s*项\s*/\s*总用量\s*([\d.]+)")
+REPORT_GROWTH_RE = re.compile(
+    r"等级\s*(\S+)\s+连签\s*(\S+?)\s*天\s+能量\s*(\S+)\s+累签\s*(\S+?)\s*天"
+)
+REPORT_FINISH_RE = re.compile(r"完成\s*(\d+)\s*/\s*(\d+)\s+等级\s*(\S+)\s+剩余:\s*(.*)")
+REPORT_SIGN_RE = re.compile(r"签到成功\s*\+?([\d.]+)\s*积分\s*连签\s*(\d+)\s*天")
+REPORT_CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩"
+
+REPORT_LEGEND = (
+    "📖 名词解释\n"
+    "  · 积分：接口返回的多个额度套餐，格式为「剩余 / 总额（已用）」，单位 credits，各套餐独立结算。\n"
+    "  · 某套餐显示「剩余 0」是接口原值（额度未发放或已过期），不是算错；小计按各套餐原值求和。\n"
+    "  · 用量：资源项数 + 累计消耗量，统计有 2~3 小时延迟。\n"
+    "  · 成长：等级、连续签到天数、能量（成长中心可消耗）、累签（历史累计签到天数）。"
+)
+
 SUBCMD_ALIASES = {
     "help": "help", "h": "help", "帮助": "help", "?": "help",
     "run": "run", "sign": "run", "qd": "run", "签到": "run", "执行": "run", "跑": "run",
@@ -81,7 +107,7 @@ SUBCMD_ALIASES = {
 HELP_TEXT = """[WorkBuddy 自动签到]
   /wb help                 帮助
   /wb run [账号序号]        立即执行完整签到（如 /wb run 2）
-  /wb query                仅查询积分 / 用量 / 成长
+  /wb query                查询积分 / 用量 / 成长（分组易读报告）
   /wb refresh              仅刷新全部账号 Token
   /wb status               运行状态、账号数、下次定时
   /wb accounts             已保存账号（脱敏）
@@ -440,19 +466,224 @@ class WorkBuddyAutoPlugin(Star):
         except Exception:
             logger.exception("[WorkBuddyAuto] 写日志失败")
 
-    def _summarize(self, output, max_chars):
-        picked = []
-        for line in output.splitlines():
-            item = line.strip()
-            if item and any(key in item for key in SUMMARY_KEYS):
-                item = re.sub(r"^\[\d{2}:\d{2}:\d{2}\]\[[^\]]+\]\s*", "", item)
-                picked.append(item)
-        if not picked:
-            picked = [x.strip() for x in output.splitlines() if x.strip()][-15:]
-        body = self._mask("\n".join(picked[-60:]))
+    # ------------------------------------------------------------------ 易读报告
+    @staticmethod
+    def _fmt_num(value):
+        """把 1375.36000266 规范成 1375.36；空串（引擎把 0 截没了）补成 0。"""
+        text = str(value or "").strip()
+        if not text:
+            return "0"
+        try:
+            return ("%.2f" % float(text)).rstrip("0").rstrip(".") or "0"
+        except ValueError:
+            return text
+
+    def _account_labels(self):
+        """返回 [(昵称, 脱敏手机号)]，顺序与 tokens.txt / 引擎账号序号一致。"""
+        import base64
+        tokens, _ = self._tokens()
+        labels = []
+        for line in re.split(r"[@\r\n]+", tokens or ""):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(":")
+            phone = parts[0].strip()
+            phone_show = ""
+            if re.fullmatch(r"1[3-9]\d{9}", phone):
+                phone_show = phone[:3] + "****" + phone[-4:]
+            elif re.fullmatch(r"\d{3}\*+\d{4}", phone):
+                phone_show = phone  # 旧容器导出的首段本来就是脱敏格式
+            nick = ""
+            for seg in parts[1:]:
+                if not seg.startswith("eyJ") or "." not in seg:
+                    continue
+                try:
+                    chunk = seg.split(".")[1]
+                    chunk += "=" * (4 - len(chunk) % 4)
+                    nick = str(json.loads(base64.urlsafe_b64decode(chunk)).get("nickname") or "")
+                except Exception:
+                    pass
+                break
+            labels.append((nick[:12], phone_show))
+        return labels
+
+    def _parse_credits(self, text):
+        """'余1375.36/总2585(已用1209.64 credits); ...' -> [(余, 总, 已用), ...]"""
+        result = []
+        for item in (text or "").split(";"):
+            m = REPORT_CREDIT_RE.search(item)
+            if m:
+                result.append(tuple(self._fmt_num(x) for x in m.group(1, 2, 3)))
+        return result
+
+    @staticmethod
+    def _sum_credits(items):
+        totals = []
+        for col in range(3):
+            try:
+                value = sum(float(x[col]) for x in items)
+            except (ValueError, TypeError):
+                value = 0
+            totals.append(("%.2f" % value).rstrip("0").rstrip(".") or "0")
+        return tuple(totals)
+
+    def _format_report(self, output, max_chars, only_index=0):
+        """把引擎原始日志重排成「按账号分组 + 字段释义」的报告。"""
+        labels = self._account_labels()
+        accounts = {}
+        notices, notes, errors = [], [], []
+
+        def bucket(idx):
+            return accounts.setdefault(idx, {
+                "credits": [], "usage": "", "growth": "", "finish": "",
+                "sign": "", "claims": 0, "manual": [], "issues": [],
+            })
+
+        for raw in (output or "").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            m = REPORT_LINE_RE.match(line)
+            body = m.group(2).strip() if m else line
+            idx = None
+            if m and m.group(1).startswith("账号") and m.group(1)[2:].isdigit():
+                idx = int(m.group(1)[2:])
+                if only_index:  # --only N 时引擎重新从 1 编号，映射回真实账号序号
+                    idx = only_index + idx - 1
+
+            if idx is None:  # 全局行：横幅、环境提示、通知、异常
+                if "账号数" in body:
+                    continue
+                if body.startswith(("╔", "║", "╚", "╭", "┌", "│", "└")):
+                    continue
+                if "非Windows环境" in body or "自动跳过桌面任务" in body:
+                    notes.append("ℹ️ 桌面专属任务已跳过（这两项需在 Windows 客户端完成一次）")
+                elif body.startswith("📢"):
+                    notices.append(body)
+                elif "Traceback" in body or body.startswith("Error") or "强制终止" in body:
+                    errors.append(body)
+                elif body.startswith("📝") or "需要续期" in body or "token已自动续期" in body:
+                    notes.append("ℹ️ " + body)
+                continue
+
+            acc = bucket(idx)
+            if body.startswith("💰 积分"):
+                acc["credits"] = self._parse_credits(body.split(":", 1)[-1])
+            elif body.startswith("📊 用量"):
+                um = REPORT_USAGE_RE.search(body)
+                acc["usage"] = (
+                    "📊 用量：%s 项资源 · 累计消耗 %s（数据延迟 2~3 小时）" %
+                    (um.group(1), self._fmt_num(um.group(2)))
+                ) if um else "📊 用量：" + body.split(":", 1)[-1].strip()
+            elif body.startswith("🌱 成长"):
+                gm = REPORT_GROWTH_RE.search(body)
+                acc["growth"] = (
+                    "🌱 成长：等级 %s · 连续签到 %s 天 · 能量 %s · 累计签到 %s 天" %
+                    gm.group(1, 2, 3, 4)
+                ) if gm else "🌱 成长：" + body.split(":", 1)[-1].strip()
+            elif body.startswith("🏁"):
+                fm = REPORT_FINISH_RE.search(body)
+                if fm:
+                    acc["finish"] = "✅ 成长任务：完成 %s/%s · 等级 %s · 未完成：%s" % (
+                        fm.group(1), fm.group(2), fm.group(3), fm.group(4).strip() or "无"
+                    )
+            elif "签到成功" in body:
+                sm = REPORT_SIGN_RE.search(body)
+                acc["sign"] = (
+                    "✅ 每日签到：+%s 积分 · 连签 %s 天" % (self._fmt_num(sm.group(1)), sm.group(2))
+                ) if sm else "✅ " + body.lstrip("✅ ").strip()
+            elif "领奖[" in body or body.startswith("🎁领奖"):
+                if "积分" in body or "能量" in body:
+                    acc["claims"] += 1
+            elif "新任务需手动" in body or "未覆盖新任务" in body:
+                acc["manual"].append(body.replace("⚠️", "").strip())
+            elif "失败" in body or "错误" in body or "⚠️" in body:
+                acc["issues"].append(body)
+
+        # 非查询类任务（如 --refresh）没有结构化数据，退回关键行列表
+        if not any(
+            a["credits"] or a["usage"] or a["growth"] or a["finish"] or a["sign"]
+            for a in accounts.values()
+        ):
+            picked = []
+            for line in (output or "").splitlines():
+                item = line.strip()
+                if not item or item.startswith(("╔", "║", "╚", "╭", "┌", "│", "└")):
+                    continue
+                if any(key in item for key in SUMMARY_KEYS):
+                    picked.append(re.sub(r"^\[\d{1,2}:\d{2}:\d{2}\]\[[^\]]+\]\s*", "", item))
+            if not picked:
+                picked = [x.strip() for x in (output or "").splitlines() if x.strip()][-15:]
+            return self._mask("\n".join(picked[-40:])[:max_chars]) or "(引擎无输出)"
+
+        core = []
+        for idx in sorted(accounts):
+            acc = accounts[idx]
+            nick, phone = labels[idx - 1] if 0 < idx <= len(labels) else ("", "")
+            title = "账号 %d" % idx
+            if nick:
+                title += " · " + nick
+            if phone:
+                title += "（%s）" % phone
+            lines = ["━━━ %s ━━━" % title]
+            if acc["credits"]:
+                items = acc["credits"]
+                lines.append("💰 积分 · %d 个额度套餐（单位 credits）" % len(items))
+                for i, (remain, total, used) in enumerate(items):
+                    mark = REPORT_CIRCLED[i] if i < len(REPORT_CIRCLED) else "%d." % (i + 1)
+                    lines.append("   %s 剩余 %s / 总额 %s · 已用 %s" % (mark, remain, total, used))
+                if len(items) > 1:
+                    lines.append("   小计：剩余 %s / 总额 %s · 已用 %s" % self._sum_credits(items))
+            for key in ("usage", "growth", "sign", "finish"):
+                if acc[key]:
+                    lines.append(acc[key])
+            if acc["claims"]:
+                lines.append("🎁 本次领取奖励 %d 项" % acc["claims"])
+            if acc["manual"]:
+                lines.append("⚠️ 需手动处理：")
+                lines.extend("   · " + x for x in acc["manual"][:3])
+            if acc["issues"]:
+                lines.append("⚠️ 异常提示：")
+                lines.extend("   · " + x for x in acc["issues"][:3])
+            core.append("\n".join(lines))
+
+        optional = []
+        if notices:
+            lines = ["📢 附加通知（引擎自带通道，不是本条 QQ 消息）"]
+            for item in notices[:4]:
+                if "失败" not in item:
+                    lines.append("  · " + item)
+                elif "PushPlus" in item and "实名" in item:
+                    lines.append(
+                        "  · PushPlus 未送达：账户未实名认证 → 建议在设置页清空该 Token；"
+                        "报告已由插件直接发到 QQ，不影响签到"
+                    )
+                else:
+                    lines.append("  · %s（附加通道，不影响签到结果）" % item)
+            optional.append("\n".join(lines))
+        if errors:
+            optional.append("⚠️ 引擎异常\n" + "\n".join("  · " + x for x in errors[:4]))
+        if notes:
+            optional.append("\n".join(notes[:4]))
+        optional.append(REPORT_LEGEND)
+
+        body = "\n\n".join(core)
+        for extra in optional:
+            if len(body) + len(extra) + 2 <= max_chars:
+                body += "\n\n" + extra
+        body = self._mask(body)
         if len(body) > max_chars:
-            body = body[-max_chars:] + "\n(已截断，/wb log 查看完整日志)"
-        return body or "(引擎无输出)"
+            body = body[:max_chars] + "\n…(已截断，/wb log 查看完整日志)"
+        return body
+
+    def _summarize(self, output, max_chars, only_index=0):
+        try:
+            return self._format_report(output, max_chars, only_index)
+        except Exception:
+            logger.exception("[WorkBuddyAuto] 报告格式化失败，回退原始摘要")
+            picked = [x.strip() for x in (output or "").splitlines() if x.strip()][-20:]
+            return self._mask("\n".join(picked))[:max_chars] or "(引擎无输出)"
 
     async def _run_engine(self, args, label):
         """执行引擎，返回 (是否成功, 摘要文本, 原始输出)。"""
@@ -520,9 +751,23 @@ class WorkBuddyAutoPlugin(Star):
             }
             self._write_json("state.json", state)
 
-            summary = self._summarize(output, self._int("reply_chars", 1200, 200, 4000))
-            head = "[WorkBuddy %s] 退出码 %s | 耗时 %ss\n" % (
-                label, rc, int(time.time() - started)
+            only_index = 0
+            if "--only" in args:
+                try:
+                    only_index = int(args[args.index("--only") + 1])
+                except (ValueError, IndexError):
+                    pass
+            summary = self._summarize(
+                output, self._int("reply_chars", 2000, 200, 4000), only_index
+            )
+            seconds = int(time.time() - started)
+            status = "✅ 成功" if rc == 0 else "❌ 失败（退出码 %s）" % rc
+            scope = (
+                "单账号（第 %d 个）" % only_index
+                if only_index else "%d 个账号" % self._account_count()
+            )
+            head = "【WorkBuddy %s】%s ｜ %s ｜ 耗时 %ss\n\n" % (
+                label, status, scope, seconds
             )
             return rc == 0, head + summary, output
 
@@ -734,13 +979,20 @@ class WorkBuddyAutoPlugin(Star):
         ])
 
     def _accounts_text(self):
+        labels = self._account_labels()
+        if not labels:
+            return "尚未配置账号：在设置页或数据目录 tokens.txt 填入 手机号:AT:RT"
         store = self._read_json("wb_refresh_tokens.json", {})
-        if not isinstance(store, dict) or not store:
-            return "令牌池尚未生成，先执行一次 /wb run（或 /wb refresh）"
-        lines = ["[已保存账号]"]
-        for index, (key, value) in enumerate(store.items(), 1):
-            updated = value.get("updated", "-") if isinstance(value, dict) else "-"
-            lines.append("%d. %s | 上次续期: %s" % (index, self._mask(str(key)), updated))
+        updated = [
+            v.get("updated", "-") if isinstance(v, dict) else "-"
+            for v in store.values()
+        ] if isinstance(store, dict) else []
+        lines = ["[已保存账号] 共 %d 个" % len(labels)]
+        for index, (nick, phone) in enumerate(labels, 1):
+            who = "%s（%s）" % (nick or "未命名", phone) if phone else (nick or "未命名")
+            when = updated[index - 1] if index - 1 < len(updated) else "-"
+            lines.append("%d. %s | 上次续期: %s" % (index, who, when))
+        lines.append("提示：/wb run 2 可单独执行第 2 个账号")
         return "\n".join(lines)
 
     def _tail_log(self, count):
