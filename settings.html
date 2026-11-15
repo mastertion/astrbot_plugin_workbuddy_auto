@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang='zh-CN' data-theme='light'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>WorkBuddy 自动签到 · 设置</title>
+<style>
+:root { --bg:#f6f7f9; --card:#ffffff; --text:#1c1e21; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --weak:#eff6ff; --ok:#15803d; --err:#b91c1c; --code:#f3f4f6; }
+[data-theme='dark'] { --bg:#15171c; --card:#1e2128; --text:#e8eaed; --muted:#9aa0aa; --line:#333842; --accent:#60a5fa; --weak:#1e2a3d; --ok:#4ade80; --err:#f87171; --code:#262a32; }
+* { box-sizing:border-box; }
+body { margin:0; padding:18px; background:var(--bg); color:var(--text); font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
+.wrap { max-width:940px; margin:0 auto; }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+h1 { font-size:20px; margin:0; }
+.badge { font-size:12px; padding:2px 10px; border-radius:999px; background:var(--weak); color:var(--accent); border:1px solid var(--line); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px; }
+.card h2 { font-size:15px; margin:0 0 2px; }
+.hint { color:var(--muted); font-size:12px; margin:0 0 10px; }
+label { display:block; font-size:13px; font-weight:600; margin:10px 0 5px; }
+input[type=text], input[type=url], textarea { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; }
+textarea { min-height:96px; resize:vertical; }
+input:focus, textarea:focus { outline:2px solid var(--accent); outline-offset:1px; }
+.row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0 14px; }
+.btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+button { padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; font-size:13px; }
+button:hover { border-color:var(--accent); }
+button.primary { background:var(--accent); color:#ffffff; border-color:var(--accent); }
+.checkline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; }
+.checkline input { width:auto; }
+pre { background:var(--code); border:1px solid var(--line); border-radius:8px; padding:12px; white-space:pre-wrap; word-break:break-all; font-size:12px; max-height:240px; overflow:auto; margin:10px 0 0; }
+.msg { margin-top:12px; font-size:13px; min-height:20px; }
+.msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
+.warn { background:var(--weak); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--muted); margin-bottom:14px; }
+a { color:var(--accent); }
+.small { font-size:12px; color:var(--muted); }
+.file { margin-top:10px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class='wrap'>
+<header>
+  <h1>WorkBuddy 自动签到 · 设置</h1>
+  <span class='badge' id='mode'>检测运行模式…</span>
+</header>
+
+<div class='warn' id='notice'>
+  令牌属于账号凭据，只会写入插件数据目录（内嵌模式）或由你下载到本地（独立模式），不会上传到任何第三方。
+  导出的配置 JSON 含明文令牌，请勿公开分享。
+</div>
+
+<div class='card'>
+  <h2>① 账号令牌</h2>
+  <p class='hint'>每行一个账号，格式 <b>手机号:AT:RT</b>，多账号直接换行；也可在插件数据目录放 tokens.txt。留空表示不修改已保存的令牌。</p>
+  <label for='tokens'>账号令牌（手机号:AT:RT）</label>
+  <textarea id='tokens' placeholder='13800138000:eyJAT...:eyJRT...&#10;13900139000:eyJAT...:eyJRT...' spellcheck='false'></textarea>
+  <div class='small' id='acctInfo'>正在读取…</div>
+  <div class='btns'>
+    <button onclick='downloadTokens()'>下载 tokens.txt</button>
+    <button onclick='copyConfig()'>复制配置 JSON</button>
+  </div>
+</div>
+
+<div class='card'>
+  <h2>② 发消息的 QQ 号</h2>
+  <p class='hint'>填 QQ 号即可，插件自动拼成「适配器ID:FriendMessage:QQ号」。群消息填 <b>group:群号</b>。适配器 ID 在 AstrBot WebUI 的「平台配置」里查看（如 aiocqhttp / QQ / QQ2）。</p>
+  <div class='row'>
+    <div>
+      <label for='notify_qqs'>发消息的 QQ 号（多个用逗号分隔）</label>
+      <input type='text' id='notify_qqs' placeholder='123456789'>
+    </div>
+    <div>
+      <label for='umo_platform'>平台适配器 ID</label>
+      <input type='text' id='umo_platform' placeholder='aiocqhttp'>
+    </div>
+    <div>
+      <label for='admin_qqs'>允许用 /wb 指令的 QQ（管理员）</label>
+      <input type='text' id='admin_qqs' placeholder='123456789'>
+    </div>
+  </div>
+  <label for='notify_umos'>高级：额外完整 UMO（可留空）</label>
+  <textarea id='notify_umos' placeholder='QQ2:FriendMessage:123456789&#10;QQ2:GroupMessage:123456789' style='min-height:60px'></textarea>
+  <div class='btns'>
+    <button onclick='testPush()' id='btnTest'>发送测试消息</button>
+  </div>
+</div>
+
+<div class='card'>
+  <h2>③ 定时与执行</h2>
+  <div class='row'>
+    <div>
+      <label for='schedule_times'>北京时间定时点（逗号分隔）</label>
+      <input type='text' id='schedule_times' placeholder='07:00,12:00,23:30'>
+    </div>
+  </div>
+  <div class='checkline'><input type='checkbox' id='schedule_enabled' checked><span>开启内置定时签到</span></div>
+  <div class='checkline'><input type='checkbox' id='notify_on_schedule' checked><span>定时完成后把报告推送给上面的 QQ 号 / 订阅会话</span></div>
+</div>
+
+<div class='card'>
+  <h2>④ 配置链接 / 下载配置</h2>
+  <p class='hint'>把「下载配置 JSON」得到的文件托管到任意 http(s) 链接，填到下面，插件启动或执行 <b>/wb config pull</b> 时会自动下载并应用；也可直接把 config.json 放进插件数据目录。设置页里的「从链接下载并应用」由 AstrBot 服务端抓取，不受浏览器跨域限制。</p>
+  <label for='config_url'>配置链接（http/https，指向 JSON 配置或纯令牌文本）</label>
+  <input type='url' id='config_url' placeholder='https://example.com/workbuddy-config.json'>
+  <div class='btns'>
+    <button onclick='fetchLink()' id='btnFetch'>从链接下载并应用</button>
+    <button onclick='downloadConfig()'>下载配置 JSON</button>
+    <button onclick='downloadTokens()'>下载 tokens.txt</button>
+  </div>
+  <div class='file'>导入本地配置：<input type='file' id='fileInput' accept='.json,.txt' onchange='importFile(this.files[0])'></div>
+</div>
+
+<div class='card'>
+  <h2>⑤ 运行状态</h2>
+  <div class='btns'>
+    <button class='primary' onclick='saveSettings()' id='btnSave'>保存到插件</button>
+    <button onclick='refreshStatus()'>刷新状态</button>
+    <button onclick='loadSettings()'>重新读取设置</button>
+  </div>
+  <div class='msg' id='msg'></div>
+  <pre id='status'>点「刷新状态」查看。</pre>
+</div>
+
+<p class='small'>
+  原项目：<a href='https://github.com/gdemoni/workbuddy-Auto' target='_blank' rel='noopener'>gdemoni/workbuddy-Auto</a> ·
+  本插件：<a href='https://github.com/mastertion/astrbot_plugin_workbuddy_auto' target='_blank' rel='noopener'>mastertion/astrbot_plugin_workbuddy_auto</a> ·
+  聊天指令：<b>/wb help</b>、<b>/wb qq &lt;QQ号&gt;</b>、<b>/wb config &lt;链接&gt;</b>
+</p>
+</div>
+
+<script>
+var $ = function (id) { return document.getElementById(id); };
+var bridge = null, native = false, exported = null;
+
+function setMsg(text, ok) {
+  var el = $('msg');
+  el.textContent = text || '';
+  el.className = 'msg ' + (ok === false ? 'err' : 'ok');
+}
+
+function download(name, content, type) {
+  var blob = new Blob([content], { type: type || 'text/plain;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function collect() {
+  var p = {
+    notify_qqs: $('notify_qqs').value.trim(),
+    umo_platform: $('umo_platform').value.trim() || 'aiocqhttp',
+    admin_qqs: $('admin_qqs').value.trim(),
+    notify_umos: $('notify_umos').value.trim(),
+    schedule_enabled: $('schedule_enabled').checked,
+    schedule_times: $('schedule_times').value.trim(),
+    notify_on_schedule: $('notify_on_schedule').checked,
+    config_url: $('config_url').value.trim()
+  };
+  var t = $('tokens').value.trim();
+  if (t) p.tokens = t;
+  return p;
+}
+
+function fill(p) {
+  if (!p || typeof p !== 'object') return;
+  if (p.tokens) $('tokens').value = String(p.tokens);
+  var keys = ['notify_qqs', 'umo_platform', 'admin_qqs', 'notify_umos', 'schedule_times', 'config_url'];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (p[k] !== undefined && p[k] !== null) $(k).value = String(p[k]);
+  }
+  if (p.schedule_enabled !== undefined) $('schedule_enabled').checked = !!p.schedule_enabled;
+  if (p.notify_on_schedule !== undefined) $('notify_on_schedule').checked = !!p.notify_on_schedule;
+}
+
+async function waitBridge(ms) {
+  var start = Date.now();
+  while (Date.now() - start < ms) {
+    var b = window.AstrBotPluginView || window.AstrBotPluginPage;
+    if (b && typeof b.apiGet === 'function') return b;
+    await new Promise(function (r) { setTimeout(r, 100); });
+  }
+  return null;
+}
+
+async function loadSettings() {
+  if (!native) return;
+  try {
+    var s = await bridge.apiGet('settings/get', {});
+    fill(s);
+    $('acctInfo').textContent = s.tokens_set
+      ? '已配置 ' + s.account_count + ' 个账号（来源：' + s.tokens_source + '，令牌不回显；留空即保持不变）'
+      : '尚未配置令牌，请在上方粘贴「手机号:AT:RT」';
+    if (s.status) $('status').textContent = s.status;
+    setMsg('已读取插件当前配置');
+  } catch (e) {
+    setMsg('读取设置失败：' + e.message, false);
+  }
+}
+
+async function refreshStatus() {
+  if (!native) {
+    $('status').textContent = '独立模式：无法读取插件运行状态。\n在 AstrBot WebUI 打开本插件的「设置」视图即可查看实时状态，或使用聊天指令 /wb status。';
+    setMsg('');
+    return;
+  }
+  try {
+    var r = await bridge.apiGet('status', {});
+    $('status').textContent = r.status || JSON.stringify(r, null, 2);
+    setMsg('状态已刷新');
+  } catch (e) { setMsg('刷新失败：' + e.message, false); }
+}
+
+async function saveSettings() {
+  var p = collect();
+  if (native) {
+    try {
+      var r = await bridge.apiPost('settings/save', p);
+      setMsg('已保存到插件（' + (r.keys || []).length + ' 项）。' + (p.tokens ? '令牌已写入数据目录 tokens.txt。' : '令牌保持不变。'));
+      await loadSettings();
+    } catch (e) { setMsg('保存失败：' + e.message, false); }
+  } else {
+    try { localStorage.setItem('workbuddy_settings', JSON.stringify(p)); } catch (e) {}
+    download('workbuddy-config.json', JSON.stringify(p, null, 2), 'application/json;charset=utf-8');
+    if (p.tokens) download('tokens.txt', p.tokens.trimEnd() + '\n');
+    setMsg('已下载 workbuddy-config.json' + (p.tokens ? ' 与 tokens.txt' : '') + '。把 config.json 放进插件数据目录，或把 JSON 托管成链接填入「配置链接」。');
+  }
+}
+
+async function exportedConfig() {
+  if (native) {
+    try { return await bridge.apiGet('settings/export', {}); }
+    catch (e) { setMsg('导出接口不可用，改用表单内容：' + e.message, false); }
+  }
+  return collect();
+}
+
+async function downloadConfig() {
+  var data = await exportedConfig();
+  exported = data;
+  download('workbuddy-config.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+  setMsg('配置 JSON 已下载（含明文令牌，请妥善保管）');
+}
+
+async function downloadTokens() {
+  var t = $('tokens').value.trim();
+  if (!t) {
+    var data = await exportedConfig();
+    t = String(data.tokens || '').trim();
+  }
+  if (!t) { setMsg('没有可下载的令牌：请先粘贴令牌，或先在插件里保存过令牌', false); return; }
+  download('tokens.txt', t.trimEnd() + '\n');
+  setMsg('tokens.txt 已下载');
+}
+
+async function copyConfig() {
+  var data = await exportedConfig();
+  var text = JSON.stringify(data, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    setMsg('配置 JSON 已复制到剪贴板（含令牌，注意保管）');
+  } catch (e) {
+    download('workbuddy-config.json', text, 'application/json;charset=utf-8');
+    setMsg('剪贴板不可用，已改为下载配置文件');
+  }
+}
+
+async function fetchLink() {
+  var url = $('config_url').value.trim();
+  if (!url) { setMsg('请先填写配置链接', false); return; }
+  if (!(url.startsWith('http://') || url.startsWith('https://'))) {
+    setMsg('配置链接需以 http:// 或 https:// 开头', false); return;
+  }
+  if (native) {
+    try {
+      var r = await bridge.apiPost('settings/fetch', { url: url, save_url: true });
+      setMsg(r.message || '已从配置链接下载并应用配置');
+      await loadSettings();
+      await refreshStatus();
+    } catch (e) { setMsg('下载配置失败：' + e.message, false); }
+  } else {
+    try {
+      var resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var text = await resp.text();
+      var data;
+      try { data = JSON.parse(text); } catch (e) { data = { tokens: text }; }
+      fill(data);
+      setMsg('已从链接下载配置并填入表单。独立模式不会写入插件，请点「保存到插件」下载配置文件。');
+    } catch (e) {
+      setMsg('浏览器直连失败（通常是跨域或网络限制）：' + e.message + '。可改用「导入本地配置」，或在 AstrBot 内嵌设置页由服务端下载。', false);
+    }
+  }
+}
+
+async function importFile(file) {
+  if (!file) return;
+  try {
+    var text = await file.text();
+    var data;
+    try { data = JSON.parse(text); } catch (e) { data = { tokens: text }; }
+    fill(data);
+    setMsg('已导入 ' + file.name + '，点「保存到插件」或「下载配置 JSON」使其生效');
+  } catch (e) { setMsg('读取文件失败：' + e.message, false); }
+}
+
+async function testPush() {
+  if (!native) {
+    setMsg('发送测试消息需要在 AstrBot WebUI 内打开本设置页', false); return;
+  }
+  try {
+    var r = await bridge.apiPost('settings/test', {});
+    setMsg('已向 ' + r.targets + ' 个会话发送测试消息，请查看 QQ');
+  } catch (e) { setMsg('发送失败：' + e.message, false); }
+}
+
+(async function init() {
+  bridge = await waitBridge(4000);
+  native = !!bridge;
+  $('mode').textContent = native ? 'AstrBot 内嵌设置页（可直接保存）' : '独立设置页（生成 / 下载配置）';
+  if (native) {
+    try { await bridge.ready(); } catch (e) {}
+    var ctx = bridge.getContext && bridge.getContext();
+    if (ctx && ctx.isDark) document.documentElement.setAttribute('data-theme', 'dark');
+    if (bridge.onContext) {
+      bridge.onContext(function (c) {
+        document.documentElement.setAttribute('data-theme', c && c.isDark ? 'dark' : 'light');
+      });
+    }
+    $('btnSave').textContent = '保存到插件';
+    $('btnFetch').textContent = '从链接下载并应用（服务端）';
+    await loadSettings();
+  } else {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    $('btnSave').textContent = '生成并下载配置';
+    $('btnTest').disabled = true;
+    $('acctInfo').textContent = '独立模式：令牌只保存在本机浏览器 / 下载的文件里';
+    $('notice').textContent = '当前是独立设置页（通过链接或本地文件打开），无法直接写入 AstrBot。填好后点「生成并下载配置」，把 workbuddy-config.json 改名为 config.json 放进插件数据目录 data/plugin_data/astrbot_plugin_workbuddy_auto/，或把 JSON 托管成配置链接；tokens.txt 也可直接放进同一目录。';
+    var hash = location.hash || '';
+    if (hash.indexOf('#cfg=') === 0) {
+      try { fill(JSON.parse(decodeURIComponent(escape(atob(hash.slice(5)))))); setMsg('已从配置链接载入配置'); }
+      catch (e) { setMsg('配置链接解析失败：' + e.message, false); }
+    } else {
+      try {
+        var saved = localStorage.getItem('workbuddy_settings');
+        if (saved) fill(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }
+})();
+</script>
+</body>
+</html>

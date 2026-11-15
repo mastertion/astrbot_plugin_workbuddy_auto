@@ -1,0 +1,8 @@
+# WorkBuddy 自动签到 · 令牌文件模板
+# 用法：删掉本说明与 # 注释行，把内容保存为 tokens.txt，放进插件数据目录
+#       data/plugin_data/astrbot_plugin_workbuddy_auto/tokens.txt
+# 每行一个账号：手机号:AT:RT（多账号直接换行，也可用 @ 分隔）
+# 注意：此文件等同于账号密码，权限建议 600，切勿提交到公开仓库。
+#
+# 13800138000:eyJAT...:eyJRT...
+# 13900139000:eyJAT...:eyJRT...

@@ -1,0 +1,106 @@
+{
+  "tokens": {
+    "type": "text",
+    "description": "账号令牌，每行一个：手机号:AT:RT（多账号可用换行或 @ 分隔）",
+    "hint": "也可以在插件设置页填写，或写入数据目录 tokens.txt。留空时优先读 tokens.txt；设置页 / 配置链接写入的凭据不会显示在 WebUI 里。",
+    "default": "",
+    "secret": true,
+    "obvious_hint": true
+  },
+  "notify_qqs": {
+    "type": "string",
+    "description": "发消息的 QQ 号，多个用逗号分隔；群填 group:群号",
+    "hint": "例如 123456789 或 123456789,123456；会自动拼成 <适配器ID>:FriendMessage:<QQ>。也可在设置页或 /wb qq 修改。",
+    "default": ""
+  },
+  "umo_platform": {
+    "type": "string",
+    "description": "AstrBot 平台适配器 ID（QQ 号前缀）",
+    "hint": "在 WebUI「平台配置」里看适配器 ID。默认 aiocqhttp；若你改过名字（如 QQ、QQ2）请如实填写，否则主动消息发不出去。",
+    "default": "aiocqhttp"
+  },
+  "config_url": {
+    "type": "string",
+    "description": "配置链接：插件启动或执行 /wb config pull 时从这里下载 JSON 配置并应用",
+    "hint": "指向一个 JSON 配置文件的 http(s) 链接（可由设置页「下载配置」生成后自行托管）。下载的配置优先于 WebUI 配置；留空则只用 WebUI / 设置页配置。",
+    "default": ""
+  },
+  "schedule_enabled": {
+    "type": "bool",
+    "description": "开启内置定时签到",
+    "default": true
+  },
+  "schedule_times": {
+    "type": "string",
+    "description": "北京时间定时点，英文逗号分隔",
+    "hint": "对应原项目 GitHub Actions / Dockerfile 的 07:00、12:00、23:30",
+    "default": "07:00,12:00,23:30"
+  },
+  "notify_on_schedule": {
+    "type": "bool",
+    "description": "定时执行完成后，把报告推送给订阅会话和上面的 QQ 号",
+    "default": true
+  },
+  "admin_qqs": {
+    "type": "string",
+    "description": "允许使用 /wb 指令的 QQ 号，逗号分隔；留空则不限制",
+    "hint": "强烈建议填写自己的 QQ 号，避免群内其他人触发签到或查看状态",
+    "default": ""
+  },
+  "notify_umos": {
+    "type": "text",
+    "description": "高级：额外完整 UMO 推送目标，每行一个（留空即可）",
+    "hint": "形如 QQ2:FriendMessage:123456789；与 /wb sub 订阅、notify_qqs 可同时使用",
+    "default": ""
+  },
+  "no_desktop": {
+    "type": "bool",
+    "description": "跳过需要 Windows 桌面端的两项任务",
+    "hint": "AstrBot 跑在 Linux/Docker 时必须开启；引擎自身也会在非 Windows 下自动跳过",
+    "default": true
+  },
+  "timeout": {
+    "type": "int",
+    "description": "单次引擎执行超时（秒）",
+    "default": 1800,
+    "slider": {
+      "min": 60,
+      "max": 7200,
+      "step": 60
+    }
+  },
+  "reply_chars": {
+    "type": "int",
+    "description": "指令 / 推送返回的摘要最大字符数",
+    "default": 1200,
+    "slider": {
+      "min": 200,
+      "max": 4000,
+      "step": 100
+    }
+  },
+  "pushplus_token": {
+    "type": "string",
+    "description": "可选：PushPlus 微信推送 Token（留空则只走 QQ）",
+    "default": "",
+    "secret": true
+  },
+  "wecom_webhook": {
+    "type": "string",
+    "description": "可选：企业微信群机器人完整 Webhook",
+    "default": "",
+    "secret": true
+  },
+  "notify_url": {
+    "type": "string",
+    "description": "可选：通用推送 URL（ntfy / 钉钉 / 飞书 / Server酱）",
+    "default": "",
+    "secret": true
+  },
+  "notify_kind": {
+    "type": "string",
+    "description": "通用推送协议，auto 按域名自动识别",
+    "default": "auto",
+    "options": ["auto", "ntfy", "dingtalk", "feishu", "wecom", "generic", "serverchan", "pushdeer"]
+  }
+}

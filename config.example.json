@@ -1,0 +1,20 @@
+{
+  "_说明": "WorkBuddy 自动签到插件配置模板。把本文件托管成 http(s) 链接即可作为「配置链接」；或改名为 config.json 放进插件数据目录 data/plugin_data/astrbot_plugin_workbuddy_auto/。",
+  "_警告": "tokens 是账号凭据，公开此文件等于公开账号，请勿提交到公开仓库。",
+  "tokens": "13800138000:这里填AT:这里填RT",
+  "notify_qqs": "123456789",
+  "umo_platform": "QQ2",
+  "admin_qqs": "123456789",
+  "notify_umos": "",
+  "config_url": "",
+  "schedule_enabled": true,
+  "schedule_times": "07:00,12:00,23:30",
+  "notify_on_schedule": true,
+  "no_desktop": true,
+  "timeout": 1800,
+  "reply_chars": 1200,
+  "pushplus_token": "",
+  "wecom_webhook": "",
+  "notify_url": "",
+  "notify_kind": "auto"
+}

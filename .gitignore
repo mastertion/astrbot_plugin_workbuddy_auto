@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.selftest_data/
+.pytest_cache/
+data/
+logs/
+tokens.txt
+config.json
+wb_refresh_tokens.json
+WORKBUDDY_ACCESS_TOKEN.txt
+*.log

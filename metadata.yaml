@@ -1,0 +1,44 @@
+name: astrbot_plugin_workbuddy_auto
+display_name: WorkBuddy 自动签到
+short_desc: 每日签到 / 成长任务 / 领奖，支持 QQ 指令、定时推送与 WebUI 设置页
+desc: |
+  把 gdemoni/workbuddy-Auto 的 daily.py 封装成 AstrBot 插件（子进程引擎，不阻塞机器人）。
+
+  ## 设置页面
+  WebUI → 插件 → WorkBuddy 自动签到 → 「设置」视图，可视化填写账号令牌、
+  发消息的 QQ 号、适配器 ID，支持「从配置链接下载配置」「下载配置」「发送测试消息」。
+  也可直接打开仓库里的 settings.html 独立设置页（无需 AstrBot 在线）。
+
+  ## 指令（默认唤醒前缀 /）
+  /wb help                 查看帮助
+  /wb run [账号序号]        立即执行完整签到（如 /wb run 2）
+  /wb query                仅查询积分 / 用量 / 成长
+  /wb refresh              仅刷新全部账号 Token
+  /wb status               运行状态、账号数、下次定时
+  /wb accounts             已保存账号（脱敏）
+  /wb sub / /wb unsub      订阅 / 取消订阅定时报告
+  /wb log [行数]           最近一次引擎日志
+  /wb stop                 终止正在运行的任务
+  /wb qq <QQ号>            设置发消息的 QQ 号
+  /wb config [链接]        查看配置 / 从链接下载并应用配置
+  /wb config pull          重新下载已保存的配置链接
+  /wb config clear         清除覆盖配置，恢复 WebUI 配置
+
+  ## 首次配置
+  1. 设置页填「账号令牌」（手机号:AT:RT，每行一个）与「发消息的 QQ 号」；
+     或把令牌写进数据目录的 tokens.txt（凭据不进 WebUI 配置文件）。
+  2. 点「发送测试消息」验证 QQ 推送；再 /wb run 手动跑一次签到。
+  3. 默认每天北京时间 07:00 / 12:00 / 23:30 自动执行并推送。
+
+  ## 注意
+  - 同一账号不要与独立容器 / GitHub Actions 版本同时运行，避免刷新令牌互相覆盖。
+  - Docker 环境请保持 no_desktop: true（跳过 Windows 桌面端专属任务）。
+  - Token 属于账号凭据，导出的配置 JSON 含明文令牌，请勿公开。
+version: 1.1.0
+author: mastertion
+repo: https://github.com/mastertion/astrbot_plugin_workbuddy_auto
+astrbot_version: ">=4.0.0"
+support_platforms:
+  - aiocqhttp
+dependencies:
+  - "requests>=2.31.0"
