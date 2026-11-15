@@ -26,7 +26,7 @@
 
 ### 2.1 AstrBot WebUI 内嵌设置页（AstrBot ≥ 4.29）
 
-`WebUI → 插件 → WorkBuddy 自动签到 → 设置`
+`WebUI 左侧「扩展功能」→「WorkBuddy 自动签到 · 设置」`
 
 - **账号令牌**：每行一个 `手机号:AT:RT`，保存后写入数据目录 `tokens.txt`（权限 600），不回显。
 - **发消息的 QQ 号**：直接填 QQ 号，自动拼 `<适配器ID>:FriendMessage:<QQ>`；群填 `group:群号`。

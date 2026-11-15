@@ -5,7 +5,7 @@ desc: |
   把 gdemoni/workbuddy-Auto 的 daily.py 封装成 AstrBot 插件（子进程引擎，不阻塞机器人）。
 
   ## 设置页面
-  WebUI → 插件 → WorkBuddy 自动签到 → 「设置」视图，可视化填写账号令牌、
+  WebUI 左侧「扩展功能」→「WorkBuddy 自动签到 · 设置」，可视化填写账号令牌、
   发消息的 QQ 号、适配器 ID，支持「从配置链接下载配置」「下载配置」「发送测试消息」。
   也可直接打开仓库里的 settings.html 独立设置页（无需 AstrBot 在线）。
 

@@ -1,7 +1,16 @@
 {
+  "metadata": {
+    "display_name": "WorkBuddy 自动签到"
+  },
   "views": {
     "settings": {
-      "title": "设置",
+      "title": "WorkBuddy 自动签到 · 设置",
+      "description": "配置账号令牌、发消息的 QQ 号、定时与配置链接，支持下载配置和发送测试消息。"
+    }
+  },
+  "pages": {
+    "settings": {
+      "title": "WorkBuddy 自动签到 · 设置",
       "description": "配置账号令牌、发消息的 QQ 号、定时与配置链接，支持下载配置和发送测试消息。"
     }
   }
