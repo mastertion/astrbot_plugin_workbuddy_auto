@@ -1550,12 +1550,205 @@ def t_expert_experience_tasks(s, uid, nick, log):
 
 
 
+# ---------- 技能分享任务 skill_share（v1.3.0） ----------
+# 链路参考 WorkBuddy 5.9.3 桌面客户端实证：先在开放平台创建真实分享渠道，
+# 再上报官方 skill_share_channel_action 的 click/success 事件，
+# 只有服务端回读到 1/1 才领奖；渠道/事件/进度任一失败都不伪造、不领奖。
+SKILL_SHARE_CHANNEL_URL = "https://open.workbuddy.cn/api/v2/open-platform/asset-shares/c2c/channels"
+SKILL_SHARE_MARKET_URL = "https://www.codebuddy.cn/v2/operation-platform/market/skill/list"
+SKILL_SHARE_REPORT_URL = "https://copilot.tencent.com/v2/report"
+SKILL_SHARE_UA = "WorkBuddy/5.9.3 WorkBuddy/5.9.3 CLI/2.165.0"
+
+
+def _stable_device_id(uid, salt):
+    import hashlib
+    return hashlib.sha256(("%s:%s" % (salt, uid)).encode()).hexdigest()[:36]
+
+
+def _desktop_fingerprint(uid, nick):
+    """桌面客户端事件公共字段（与 5.9.3 上报形态一致）。"""
+    now = int(time.time() * 1000)
+    return {
+        "timezone": "Asia/Shanghai", "reportDelay": 2000,
+        "userId": uid, "username": nick, "userNickname": nick,
+        "product": "SaaS", "releaseDate": 1793093056315,
+        "commit": "d46924219e79332f49c37ccebf27292f87001b19",
+        "qimei36": _stable_device_id(uid, "qimei"),
+        "ideName": "WorkBuddy", "ideType": "WorkBuddy", "ideVersion": "5.9.3",
+        "machineId": _stable_device_id(uid, "machine"),
+        "sessionId": _stable_device_id(uid, "session"),
+        "extName": "workbuddy-desktop", "extVersion": "5.9.3",
+        "os": "win32", "arch": "x64", "osVersion": "10.0.28000",
+        "cpuCores": 8, "memorySize": 16,
+        "timestamp": now, "presentAt": now,
+    }
+
+
+def _report_desktop_events(s, uid, nick, events):
+    """裸数组 + 桌面头族，上报到 copilot 域。返回 HTTP 状态码。"""
+    fp = _desktop_fingerprint(uid, nick)
+    arr = []
+    for event in events:
+        item = dict(fp)
+        item.update(event)
+        arr.append(item)
+    headers = {
+        "Authorization": s.headers.get("Authorization", ""),
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8",
+        "User-Agent": SKILL_SHARE_UA,
+        "X-Domain": "copilot.tencent.com", "X-Product": "SaaS",
+        "X-Request-ID": str(uuid.uuid4()),
+    }
+    if uid:
+        headers["X-User-Id"] = uid
+    sender = requests.Session()
+    sender.trust_env = False
+    try:
+        return sender.post(SKILL_SHARE_REPORT_URL, json=arr, headers=headers,
+                           timeout=20, verify=False).status_code
+    except Exception:
+        return 0
+
+
+def _skill_share_market_skill(s):
+    """从技能市场取一个真实可分享技能，不写死示例 ID。"""
+    try:
+        resp = s.post(SKILL_SHARE_MARKET_URL, json={"page": 1, "page_size": 20},
+                      timeout=20, verify=False)
+        payload = resp.json() or {}
+        if not (200 <= resp.status_code < 300) or payload.get("code") not in (0, None):
+            return None
+        rows = (payload.get("data") or {}).get("skills") or []
+    except Exception:
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        sid = str(row.get("skill_id") or row.get("id") or "").strip()
+        name = _extract_name(row.get("display_name_zh") or row.get("name")
+                             or row.get("display_name_en") or "").strip()
+        if sid and name:
+            desc = (row.get("description_zh") or row.get("description")
+                    or row.get("description_en") or "")
+            return {"id": sid, "name": name, "description": _extract_name(desc)[:60]}
+    return None
+
+
+def _create_skill_share_channel(s, uid, skill):
+    """按官方请求体创建真实分享渠道，回执必须同时含 share_code 与 link。"""
+    sid = str(skill.get("id") or "").strip()
+    if not sid:
+        return False, "", "技能 ID 为空"
+    body = {
+        "asset_kind": "skill",
+        "asset_source": "market",
+        "asset_ref": json.dumps({"asset_id": sid}, separators=(",", ":")),
+        "ways": ["link", "wxacode", "wxapath"],
+        "extra": {"name": skill.get("name") or "技能",
+                  "description": skill.get("description") or "",
+                  "shareKey": sid, "marketplaceSource": "builtin-market"},
+    }
+    headers = {
+        "Authorization": s.headers.get("Authorization", ""),
+        "X-User-Id": uid, "X-Domain": "copilot.tencent.com",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": SKILL_SHARE_UA,
+    }
+    try:
+        resp = s.post(SKILL_SHARE_CHANNEL_URL, json=body, headers=headers,
+                      timeout=30, verify=False)
+        payload = resp.json() or {}
+    except Exception as exc:
+        return False, "", type(exc).__name__
+    if not (200 <= resp.status_code < 300) or payload.get("code") not in (0, None):
+        return False, "", "HTTP %s %s" % (resp.status_code, str(payload.get("msg") or "")[:60])
+    data = payload.get("data") or {}
+    share_code = str(data.get("share_code") or "").strip()
+    link = ""
+    for way in data.get("ways") or []:
+        if isinstance(way, dict) and way.get("share_way") == "link":
+            link = str(way.get("resource_ref") or "").strip()
+            break
+    if not share_code or not link:
+        return False, "", "回执缺少 share_code 或 link"
+    return True, share_code, ""
+
+
+def _skill_share_events(skill, share_code):
+    common = {"skillId": skill["id"], "skillName": skill["name"], "skillType": "market"}
+    now = int(time.time() * 1000)
+
+    def make(panel_action):
+        return {"eventCode": "skill_share_channel_action", **common,
+                "action": "link", "panelAction": panel_action, "panelType": "clipboard",
+                "isSuccessful": True, "cost": 0, "id": share_code, "actionAt": now}
+
+    return [make("click"), make("success")]
+
+
+def t_skill_share(s, uid, nick, log):
+    """skill_share：真实渠道 + 官方事件 + 进度回读，达标才领奖。"""
+    code = "skill_share"
+    try:
+        resp = s.get(BASE + "/v2/activity/growth/tasks", timeout=25, verify=False)
+        tasks = (resp.json().get("data") or {}).get("tasks") or []
+    except Exception:
+        log("   技能分享: 任务列表读取失败，跳过")
+        return
+    task = next((t for t in tasks if isinstance(t, dict) and t.get("task_code") == code), None)
+    if not task:
+        return  # 任务未下发或已下线，静默跳过
+    available, reason = experience_task_available(task)
+    if not available:
+        log("   技能分享: %s，跳过" % reason)
+        return
+    if task.get("accept_status") in ("", "not_accepted", None):
+        try:
+            rr = s.post(BASE + "/v2/activity/growth/tasks/accept",
+                        json={"task_codes": [code]}, timeout=20, verify=False)
+            if rr.json().get("code") not in (0, None):
+                log("   技能分享: 接受任务失败，跳过")
+                return
+        except Exception:
+            log("   技能分享: 接受任务异常，跳过")
+            return
+    skill = _skill_share_market_skill(s)
+    if not skill:
+        log("   技能分享: 市场技能列表不可用，跳过（不伪造分享）")
+        return
+    ok, share_code, err = _create_skill_share_channel(s, uid, skill)
+    if not ok:
+        log("   技能分享: 创建分享渠道失败 %s" % err)
+        return
+    http = _report_desktop_events(s, uid, nick, _skill_share_events(skill, share_code))
+    if not (200 <= http < 300):
+        log("   技能分享: 事件上报失败 HTTP %s，不领奖" % http)
+        return
+    status, current, target = prog(s, code)
+    for _ in range(4):
+        if status in ("completed", "claimed") or (
+                isinstance(current, (int, float)) and isinstance(target, (int, float))
+                and current >= target):
+            break
+        time.sleep(3)
+        status, current, target = prog(s, code)
+    reached = status in ("completed", "claimed") or (
+        isinstance(current, (int, float)) and isinstance(target, (int, float)) and current >= target)
+    if reached:
+        log("   ✅ 技能分享: 已完成 %s/%s（%s）" % (current, target, skill["name"]))
+        claim(s, code, log)
+    else:
+        log("   技能分享: 渠道已创建但进度未点亮 %s/%s，不领奖" % (current, target))
+
+
 def t_unknown_tasks(s, uid, nick, log):
     """检测脚本未覆盖的新任务，明确提示"""
     known = {"create_canvas", "playbook_prompt", "RichMeow_Chat", "Library_read", "Expert_lighthouse",
              "Expert_Philanthropy", "Hp_Appearance", "Buddy_App", "Buddy_App_QQ", "Model_chat_GLM5.2",
              "black_cat", "Expert_team_use_3", "first_buddy", "chat_5", "skill_1", "expert_5",
-             "template_5", "automation_1", "workstation_expert"}
+             "template_5", "automation_1", "workstation_expert", "skill_share"}
     known.update(EXPERT_EXPERIENCE_TASKS)
     r = s.get(BASE + "/v2/activity/growth/tasks", timeout=25, verify=False).json()
     for t in r.get("data", {}).get("tasks", []):
@@ -1633,6 +1826,7 @@ def run_account(idx, acc, do_desktop):
     t_canvas_automation(s, uid, nick, log)
     t_expert_5(s, uid, nick, log)
     t_expert_experience_tasks(s, uid, nick, log)
+    t_skill_share(s, uid, nick, log)
     t_template_5(s, uid, nick, log)
     t_glm52(s, uid, nick, log)
     t_black_cat(s, uid, nick, log)

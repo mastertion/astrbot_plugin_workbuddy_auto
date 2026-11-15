@@ -26,6 +26,10 @@ v1.1 新增：
 v1.2 新增：
   - 易读报告：按账号分组、套餐逐条解释、昵称/脱敏手机号标识、名词释义
   - 横幅/环境提示/附加通道报错单独归类，不再混进账号数据
+
+v1.3 新增：
+  - skill_share 成长任务：真实分享渠道 + 官方事件 + 进度回读，达标才领奖
+  - 报告新增「分享技能给好友」完成行
 """
 import asyncio
 import json
@@ -537,7 +541,7 @@ class WorkBuddyAutoPlugin(Star):
         def bucket(idx):
             return accounts.setdefault(idx, {
                 "credits": [], "usage": "", "growth": "", "finish": "",
-                "sign": "", "claims": 0, "manual": [], "issues": [],
+                "sign": "", "share": "", "claims": 0, "manual": [], "issues": [],
             })
 
         for raw in (output or "").splitlines():
@@ -588,6 +592,8 @@ class WorkBuddyAutoPlugin(Star):
                     acc["finish"] = "✅ 成长任务：完成 %s/%s · 等级 %s · 未完成：%s" % (
                         fm.group(1), fm.group(2), fm.group(3), fm.group(4).strip() or "无"
                     )
+            elif "技能分享" in body and "✅" in body:
+                acc["share"] = "✅ 分享技能给好友：已完成（真实分享渠道 + 官方事件）"
             elif "签到成功" in body:
                 sm = REPORT_SIGN_RE.search(body)
                 acc["sign"] = (
@@ -635,7 +641,7 @@ class WorkBuddyAutoPlugin(Star):
                     lines.append("   %s 剩余 %s / 总额 %s · 已用 %s" % (mark, remain, total, used))
                 if len(items) > 1:
                     lines.append("   小计：剩余 %s / 总额 %s · 已用 %s" % self._sum_credits(items))
-            for key in ("usage", "growth", "sign", "finish"):
+            for key in ("usage", "growth", "sign", "finish", "share"):
                 if acc[key]:
                     lines.append(acc[key])
             if acc["claims"]:
